@@ -9,6 +9,7 @@
 
 #include <windows.h>
 #include <string>
+#include <vector>
 
 namespace Base {
 
@@ -48,6 +49,10 @@ public:
     static void AddPackFile(const wchar *name);
     static void OpenPackFiles(void);
     static void ReleasePackFiles(void);
+
+    // Lists the files of one folder inside the mounted pack files. Folders and nested folders are
+    // skipped. FindFiles() above only walks the real file system, which the packed maps are not in.
+    static void FindPackFiles(const std::wstring &folder, std::vector<std::wstring> &names);
 #endif
 
     static void FindFiles(const std::wstring &folderfrom, const wchar *files, ENUM_FILES ef, DWORD user);

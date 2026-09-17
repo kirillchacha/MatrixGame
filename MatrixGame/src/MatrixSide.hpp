@@ -14,7 +14,13 @@
 //#define MAX_ROBOTS_BUILD        10
 #define MAX_ROBOTS      60
 #define MAX_FACTORIES   10
-#define PLAYER_SIDE     1
+
+// The side the human plays. It used to be the constant 1 (Yellow), but the menu lets the player pick
+// any side the map has a base for, so the value is now decided at startup and read back from the map.
+// Every "== PLAYER_SIDE" comparison keeps working, it just asks the map instead of the preprocessor.
+#define PLAYER_SIDE_DEFAULT 1
+int PlayerSideId(void);
+#define PLAYER_SIDE     PlayerSideId()
 #define MAX_LOGIC_GROUP (MAX_ROBOTS + 1)
 
 #define MAX_TEAM_CNT         3

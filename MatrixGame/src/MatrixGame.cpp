@@ -10,6 +10,9 @@
 
 #include "MatrixGame.h"
 #include "MatrixFormGame.hpp"
+#include "MatrixFormMenu.hpp"
+#include "PlayableSides.hpp"
+#include "Text/Font.hpp"
 #include "MatrixMap.hpp"
 #include "Interface/CInterface.h"
 #include "MatrixRenderPipeline.hpp"
@@ -57,17 +60,24 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
         map = args[1];
     }
 
+    bool relaunch = false;  // restart the process to show the menu again after a match
+
     try {
         uint32_t seed = (unsigned)time(nullptr);
-        CGame::Init(hInstance, nullptr, map, seed);
 
-        CFormMatrixGame *formgame = HNew(NULL) CFormMatrixGame();
-        FormChange(formgame);
-
-        timeBeginPeriod(1);
+        CFormMatrixGame *formgame = NULL;
 
         if (map)
         {
+            // Visibility calculation mode: the map comes from the command line, no menu is shown.
+            CGame::InitEngine(hInstance, nullptr, seed);
+            CGame::StartMatch(map, PLAYER_SIDE_DEFAULT);
+
+            formgame = HNew(NULL) CFormMatrixGame();
+            FormChange(formgame);
+
+            timeBeginPeriod(1);
+
             {
                 std::ofstream out("calcvis.log", std::ios::app);
                 std::string name = utils::from_wstring(g_MatrixMap->MapName());
@@ -80,18 +90,50 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
                 std::ofstream out("calcvis.log", std::ios::app);
                 out << "done\n";
             }
+
+            timeEndPeriod(1);
         }
         else
         {
-            L3GRun();
-        }
+            CGame::InitEngine(hInstance, nullptr, seed);
 
-        timeEndPeriod(1);
+            timeBeginPeriod(1);
+
+            CFormMenu *formmenu = HNew(NULL) CFormMenu();
+
+            // The menu picks a map and a side, then the match runs.
+            CGame::RunGameLoop(formmenu);
+
+            if (!FLAG(g_Flags, GFLAG_APPCLOSE) && g_MatchChoice.m_Start)
+            {
+                CGame::StartMatch(g_MatchChoice.m_Map.c_str(), g_MatchChoice.m_SideId);
+
+                formgame = HNew(NULL) CFormMatrixGame();
+                CGame::RunGameLoop(formgame);
+
+                FormChange(NULL);
+                HDelete(CFormMatrixGame, formgame, NULL);
+                formgame = NULL;
+
+                CGame::EndMatch();
+
+                // Back to the menu. The engine cannot build a second map in one process - object
+                // loading walks data the first map left behind and crashes - so the menu comes back
+                // in a fresh process instead. See native/DEVELOPMENT.md.
+                relaunch = !FLAG(g_Flags, GFLAG_APPCLOSE);
+            }
+
+            FormChange(NULL);
+            HDelete(CFormMenu, formmenu, NULL);
+
+            timeEndPeriod(1);
+        }
 
         CGame::Deinit();
 
         FormChange(NULL);
-        HDelete(CFormMatrixGame, formgame, NULL);
+        if (formgame)
+            HDelete(CFormMatrixGame, formgame, NULL);
 
         g_Cache->Clear();
         L3GDeinit();
@@ -128,6 +170,25 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
     }
 
     ClipCursor(NULL);
+
+    if (relaunch)
+    {
+        wchar exe[MAX_PATH];
+        if (GetModuleFileNameW(NULL, exe, MAX_PATH))
+        {
+            STARTUPINFOW si;
+            PROCESS_INFORMATION pi;
+            ZeroMemory(&si, sizeof(si));
+            si.cb = sizeof(si);
+            ZeroMemory(&pi, sizeof(pi));
+
+            if (CreateProcessW(exe, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+            {
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+            }
+        }
+    }
 
     return 1;
 }
@@ -169,7 +230,23 @@ static void static_init(void) {
     g_Flags = 0;  // GFLAG_FORMACCESS;
 }
 
-void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uint32_t seed, const SRobotsSettings *provided_settings,
+// State that used to live on CGame::Init's stack. InitEngine() and StartMatch() are separate calls
+// now - the EXE build runs its menu in between - so this data has to outlive the first one.
+static bool s_MatchRunning = false;  // guards EndMatch: Deinit() calls it again on shutdown
+static CLoadProgress s_LoadProgress;
+static CStorage *s_StorCfg = nullptr;
+static bool s_StorCfgPresent = false;
+static SRobotsSettings s_Settings;
+
+void CGame::Init(HINSTANCE inst, HWND wnd, const wchar *map, uint32_t seed,
+                 const SRobotsSettings *provided_settings, const wchar *lang, const wchar *txt_start,
+                 const wchar *txt_win, const wchar *txt_loss, const wchar *planet)
+{
+    InitEngine(inst, wnd, seed, provided_settings, lang, txt_start, txt_win, txt_loss, planet);
+    StartMatch(map, PLAYER_SIDE_DEFAULT);
+}
+
+void CGame::InitEngine(HINSTANCE inst, [[maybe_unused]] HWND wnd, uint32_t seed, const SRobotsSettings *provided_settings,
                 const wchar *lang, const wchar *txt_start, const wchar *txt_win, const wchar *txt_loss,
                 const wchar *planet)
 {
@@ -183,11 +260,10 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
     CFile::AddPackFile(L"DATA\\robots.pkg");
     CFile::OpenPackFiles();
 
-    CLoadProgress lp;
-    g_LoadProgress = &lp;
+    g_LoadProgress = &s_LoadProgress;
     DCP();
 
-    CStorage stor_cfg(g_MatrixHeap);
+    CStorage &stor_cfg = *(s_StorCfg = HNew(g_MatrixHeap) CStorage(g_MatrixHeap));
     bool stor_cfg_present = false;
     std::wstring stor_cfg_name;
     std::wstring conf_file{FILE_CONFIGURATION_LOCATION}; // generate the .dat file path
@@ -278,7 +354,7 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
     g_MatrixData->BlockGet(L"Config")->SaveInTextFile(L"g_ConfigDump.txt");
 #endif
 
-    SRobotsSettings settings; // Actual settings
+    SRobotsSettings &settings = s_Settings; // Actual settings
     if (provided_settings != nullptr)
     {
         settings = *provided_settings;
@@ -323,10 +399,27 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
     g_Sampler.ApplySettings(&settings);
     SetMaxCameraDistance(settings.m_MaxDistance);
 
+    s_StorCfgPresent = stor_cfg_present;
 
     DCP();
+}
+
+void CGame::StartMatch(const wchar *map, int player_side_id)
+{
+    DTRACE();
+
+    CStorage &stor_cfg = *s_StorCfg;
+    const bool stor_cfg_present = s_StorCfgPresent;
+    SRobotsSettings &settings = s_Settings;
+
+
+    // These lists are per match, but static_init() only runs once per process: after a match they
+    // still point at objects the previous map owned. Reset them before the new map fills them.
+    CMatrixMapStatic::StaticInit();
+    CMatrixMapObject::StaticInit();
 
     g_MatrixMap = HNew(g_MatrixHeap) CMatrixMapLogic;
+    g_MatrixMap->SetPlayerSideId(player_side_id);
 
     g_MatrixMap->LoadSide(*g_MatrixData->BlockGet(L"Side"));
     // g_MatrixMap->LoadTactics(*g_MatrixData->BlockGet(L"Tactics"));
@@ -359,7 +452,16 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
         mapname = g_MatrixData->BlockGet(L"Config")->ParGet(L"Map");
     }
 
-    stor.Load(mapname.c_str());
+    if (!stor.Load(mapname.c_str()))
+        throw std::runtime_error("Cannot read the selected map.");
+    auto *owners = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_SIDE, ST_BYTE);
+    auto *kinds = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_KIND, ST_BYTE);
+    std::vector<int> playable;
+    if (owners && kinds && owners->GetArraysCount() && kinds->GetArraysCount())
+        playable = CollectPlayableSides({owners->GetFirst<BYTE>(0), owners->GetArrayLength(0)},
+                                        {kinds->GetFirst<BYTE>(0), kinds->GetArrayLength(0)}, BUILDING_BASE);
+    if (std::find(playable.begin(), playable.end(), player_side_id) == playable.end())
+        throw std::runtime_error("The selected side has no starting base on this map.");
     DCP();
 
     if (0 > g_MatrixMap->PrepareMap(stor, mapname))
@@ -513,6 +615,8 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
     if (!FLAG(g_MatrixMap->m_Flags, MMFLAG_FULLAUTO))
         g_MatrixMap->EnterDialogMode(TEMPLATE_DIALOG_BEGIN);
 
+    s_MatchRunning = true;
+
     // this code can be safely removed from release : RELEASE_OFF
 
     // if (iface_save) bpi.SaveInTextFile(IF_PATH, true);
@@ -591,6 +695,11 @@ void CGame::ApplyVideoParams(SRobotsSettings &set) {
 
     SETFLAG(g_Flags, GFLAG_STENCILAVAILABLE);
 
+    // A device reset fails while anything still holds default pool resources. The menu draws before
+    // the first match, so its vertex buffers and fonts have to let go here.
+    CInstDraw::MarkAllBuffersNoNeed();
+    Text::OnLostDevice();
+
     if (D3D_OK != g_D3DD->Reset(&g_D3Dpp)) {
         if (bpp == 16)
             g_D3Dpp.AutoDepthStencilFormat = D3DFMT_D16;
@@ -603,6 +712,8 @@ void CGame::ApplyVideoParams(SRobotsSettings &set) {
         }
         RESETFLAG(g_Flags, GFLAG_STENCILAVAILABLE);
     }
+
+    Text::OnResetDevice();
 
     D3DVIEWPORT9 ViewPort;
     ZeroMemory(&ViewPort, sizeof(D3DVIEWPORT9));
@@ -654,30 +765,27 @@ void CGame::ApplyVideoParams(SRobotsSettings &set) {
     ASSERT_DX(g_D3DD->LightEnable(0, TRUE));
 }
 
-void CGame::Deinit(void) {
+void CGame::EndMatch(void) {
     DTRACE();
 
+    if (!s_MatchRunning)
+        return;
+
+    s_MatchRunning = false;
+
     SSpecialBot::ClearAIRobotType();
-
-    g_Config.Clear();
-
-    if (g_Render) {
-        HDelete(CRenderPipeline, g_Render, g_MatrixHeap);
-        g_Render = NULL;
-    }
 
     CMatrixHint::ClearAll();
 
     if (g_MatrixMap) {
         ASSERT(g_MatrixHeap);
 
+        // Hand back the shared default pool buffers (map groups, surfaces, shadows, instant draw)
+        // the same way a lost device does, otherwise the next map builds on top of stale ones.
+        g_MatrixMap->ReleasePoolDefaultResources();
+
         HDelete(CMatrixMapLogic, g_MatrixMap, g_MatrixHeap);
         g_MatrixMap = NULL;
-    }
-
-    if (g_MatrixData) {
-        HDelete(CBlockPar, g_MatrixData, NULL);
-        g_MatrixData = NULL;
     }
 
     CMatrixRobot::DestroyPneumaticData();
@@ -749,6 +857,33 @@ void CGame::Deinit(void) {
         g_PopupChassis = NULL;
     }
 
+    // The cache is deliberately left alone: its entries (skins, vector objects, textures) are keyed
+    // by name and reused by the next map. Clearing it here crashes the next map load.
+}
+
+void CGame::Deinit(void) {
+    DTRACE();
+
+    EndMatch();
+
+    g_Config.Clear();
+
+    if (g_Render) {
+        HDelete(CRenderPipeline, g_Render, g_MatrixHeap);
+        g_Render = NULL;
+    }
+
+    if (g_MatrixData) {
+        HDelete(CBlockPar, g_MatrixData, NULL);
+        g_MatrixData = NULL;
+    }
+
+    if (s_StorCfg) {
+        HDelete(CStorage, s_StorCfg, g_MatrixHeap);
+        s_StorCfg = NULL;
+        s_StorCfgPresent = false;
+    }
+
     if (g_Config.m_Labels) {
         for (int i = 0; i < LABELS_LAST; i++) {
             g_Config.m_Labels[i].std::wstring::~wstring();
@@ -775,10 +910,10 @@ void CGame::Deinit(void) {
     }
 }
 
-void CGame::RunGameLoop(CFormMatrixGame *formgame) {
+void CGame::RunGameLoop(CForm *form) {
     try {
         g_ExitState = 0;
-        FormChange(formgame);
+        FormChange(form);
 
         timeBeginPeriod(1);
 

@@ -11,6 +11,7 @@
 #include "CBlockPar.hpp"
 
 class CFormMatrixGame;
+class CForm;
 class CMatrixMapLogic;
 class CIFaceList;
 class CRenderPipeline;
@@ -75,15 +76,47 @@ public:
         const wchar *txt_loss = nullptr,
         const wchar *planet = nullptr
     );
+    /**
+     * @brief The part of Init() that does not depend on the map: heaps, packs, config, window,
+     *        Direct3D, render pipeline and video settings.
+     *
+     * Split out of Init() so that the EXE build can show its menu (see CFormMenu) after the engine
+     * can draw but before any match exists. Arguments mean the same as in Init().
+     */
+    static void InitEngine(
+        HINSTANCE hInstance,
+        HWND wnd,
+        uint32_t seed = 0,
+        const SRobotsSettings *provided_settings = nullptr,
+        const wchar *lang = nullptr,
+        const wchar *txt_start = nullptr,
+        const wchar *txt_win = nullptr,
+        const wchar *txt_loss = nullptr,
+        const wchar *planet = nullptr
+    );
+
+    /**
+     * @brief Loads a map and prepares a single match. Requires InitEngine() to have run.
+     *
+     * @param map Map name, as described in Init().
+     * @param player_side_id Side the human plays, as defined in the "Side" config block (1..4).
+     */
+    static void StartMatch(const wchar *map, int player_side_id);
+
+    /**
+     * @brief Releases everything StartMatch() created, keeping the engine alive for the next match.
+     */
+    static void EndMatch();
+
     static void Deinit();
     static void SafeFree();
 
     /**
      * @brief An envelope over L3GRun() function to account for DLL multiple windows form change.
      *
-     * @param formGame The form(i.e. Window) of the game.
+     * @param form The form(i.e. Window) to run: the menu (CFormMenu) or the game itself.
      */
-    static void RunGameLoop(CFormMatrixGame *formGame);
+    static void RunGameLoop(CForm *form);
     static void SaveResult(SRobotGameState *state);
 
 private:

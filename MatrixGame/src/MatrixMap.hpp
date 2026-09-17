@@ -337,6 +337,7 @@ public:
     CMatrixSideUnit *m_PlayerSide;
     CMatrixSideUnit *m_Side; // Array actually
     int m_SideCnt;
+    int m_PlayerSideId;  // Side id the human plays, chosen in the menu before the map is loaded
 
     PCMatrixEffect m_EffectsFirst;
     PCMatrixEffect m_EffectsLast;
@@ -582,6 +583,10 @@ public:
 
     CMatrixSideUnit *GetSideById(int id);
     CMatrixSideUnit *GetPlayerSide(void) { return m_PlayerSide; };
+
+    // Must be set before LoadSide(), which is what binds m_PlayerSide to this id.
+    void SetPlayerSideId(int id) { m_PlayerSideId = id; };
+    int GetPlayerSideId(void) const { return m_PlayerSideId; };
 
     void WaterClear(void);
     void WaterInit(void);

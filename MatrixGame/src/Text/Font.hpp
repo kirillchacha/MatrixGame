@@ -35,4 +35,9 @@ private:
 
 Font& GetFont(IDirect3DDevice9* device, std::wstring_view font_name);
 
+// ID3DXFont keeps device resources, so it has to be told about a device reset. Call these around
+// every g_D3DD->Reset(), or the reset fails once any text has been drawn.
+void OnLostDevice(void);
+void OnResetDevice(void);
+
 } // namespace Text

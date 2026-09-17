@@ -115,6 +115,8 @@ size_t Font::CalcTextWidth(std::wstring_view text) const
     return rect.right;
 }
 
+static std::map<std::wstring_view, Font>* g_loaded_fonts = nullptr;
+
 Font& GetFont(IDirect3DDevice9* device, std::wstring_view font_name)
 {
     static auto m_fonts = [&]{
@@ -129,12 +131,36 @@ Font& GetFont(IDirect3DDevice9* device, std::wstring_view font_name)
         return fonts;
     }();
 
+    g_loaded_fonts = &m_fonts;
+
     if (!m_fonts.contains(font_name))
     {
         throw std::runtime_error("Unknown font: " + utils::from_wstring(font_name));
     }
 
     return m_fonts.at(font_name);
+}
+
+void OnLostDevice(void)
+{
+    if (!g_loaded_fonts)
+        return;
+
+    for (auto& font : *g_loaded_fonts)
+    {
+        font.second->OnLostDevice();
+    }
+}
+
+void OnResetDevice(void)
+{
+    if (!g_loaded_fonts)
+        return;
+
+    for (auto& font : *g_loaded_fonts)
+    {
+        font.second->OnResetDevice();
+    }
 }
 
 } // namespace Text

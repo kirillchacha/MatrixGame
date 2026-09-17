@@ -33,6 +33,31 @@ void CFile::OpenPackFiles(void) {
     }
 }
 
+void CFile::FindPackFiles(const std::wstring &folder, std::vector<std::wstring> &names) {
+    if (m_Packs == NULL)
+        return;
+
+    const std::string path{utils::from_wstring(folder)};
+
+    for (CPackFile *pack : m_Packs->m_PackFiles) {
+        // FindFirst() dereferences the folder it looks up without checking it, so ask first.
+        if (!pack->PathExists(path))
+            continue;
+
+        SSearchRec sr(nullptr);
+        if (pack->FindFirst(path, 0, sr) != 0)
+            continue;
+
+        do {
+            if (sr.T != FILEEC_FOLDER && !sr.Name.empty())
+                names.push_back(utils::to_wstring(sr.Name));
+        }
+        while (pack->FindNext(sr) == 0);
+
+        pack->FindClose(sr);
+    }
+}
+
 void CFile::ReleasePackFiles(void) {
     if (m_Packs) {
         ASSERT(m_PacksRef == 0);

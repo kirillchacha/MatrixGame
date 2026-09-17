@@ -899,6 +899,9 @@ int CMatrixMap::ReloadDynamics(CStorage &stor, CMatrixMap::EReloadStep step, voi
 
         {
             // Camera & Select
+            CMatrixMapStatic *own_base = NULL;  // player's base away from the stored camera position
+            D3DXVECTOR2 own_pos(0, 0);
+
             ms = CMatrixMapStatic::GetFirstLogic();
             for (; ms; ms = ms->GetNextLogic()) {
                 if (ms->GetObjectType() == OBJECT_TYPE_BUILDING) {
@@ -913,7 +916,13 @@ int CMatrixMap::ReloadDynamics(CStorage &stor, CMatrixMap::EReloadStep step, voi
                             auto tmp = bup - cpp;
                             if (D3DXVec2LengthSq(&tmp) < POW2(300)) {
                                 g_MatrixMap->GetPlayerSide()->Select(BUILDING, ms);
+                                own_base = NULL;
                                 break;
+                            }
+
+                            if (own_base == NULL) {
+                                own_base = ms;
+                                own_pos = bup;
                             }
 
                             continue;
@@ -925,6 +934,13 @@ int CMatrixMap::ReloadDynamics(CStorage &stor, CMatrixMap::EReloadStep step, voi
                         break;
                     }
                 }
+            }
+
+            // The stored camera position is authored for the side the original game gave the human.
+            // When the menu picked another side, start at that side's own base instead.
+            if (own_base != NULL) {
+                g_MatrixMap->GetPlayerSide()->Select(BUILDING, own_base);
+                g_MatrixMap->m_Camera.SetXYStrategy(own_pos);
             }
         }
         g_MatrixMap->m_Camera.Takt(0);

@@ -48,7 +48,7 @@ CMatrixMap::CMatrixMap()
     m_RN(g_MatrixHeap), m_EffectsFirst(NULL), m_EffectsLast(NULL),
     m_EffectsNextTakt(NULL), m_Flags(0), m_WaterName{}, m_SkyAngle(0), m_SkyDeltaAngle(0),
     m_PrevTimeCheckStatus(-1500), m_Time(0), m_BeforeWinCount(0), m_PauseHint(NULL),
-    m_DialogModeName(NULL), m_BeforeWinLooseDialogCount(0) {
+    m_DialogModeName(NULL), m_BeforeWinLooseDialogCount(0), m_PlayerSideId(PLAYER_SIDE_DEFAULT) {
     DTRACE();
 
     m_Reflection = NULL;
@@ -1022,7 +1022,7 @@ void CMatrixMap::LoadSide(CBlockPar &bp) {
             m_Side[side_idx].m_Name = name.GetStrPar(0, L",");
             if (id == PLAYER_SIDE)
             {
-                m_PlayerSide = m_Side;
+                m_PlayerSide = m_Side + side_idx;
                 m_Side[side_idx].InitPlayerSide();
             }
         }

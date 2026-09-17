@@ -34,6 +34,11 @@
 //                              приказ так как предыдущий нельзя было прервать CanBreakOrder==false. в этом случае когда
 //                              CanBreakOrder станет true выполнится кода: robot->GetEnv()->m_Place=-1
 
+// Backs the PLAYER_SIDE macro. Before a map exists (menu, teardown) the default side is reported.
+int PlayerSideId(void) {
+    return g_MatrixMap ? g_MatrixMap->GetPlayerSideId() : PLAYER_SIDE_DEFAULT;
+}
+
 inline bool PrepareBreakOrder(CMatrixMapStatic *robot);
 inline bool IsLiveUnit(CMatrixMapStatic *obj);
 inline CPoint GetMapPos(CMatrixMapStatic *obj);
