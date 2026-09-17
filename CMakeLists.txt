@@ -1,4 +1,8 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
+
+# Use the same CRT as zlib/libpng on modern MSVC. The legacy option setup
+# otherwise leaves RuntimeLibrary empty and mixes /MT objects with /MD libs.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CONFIGURATION_TYPES Release Debug)
