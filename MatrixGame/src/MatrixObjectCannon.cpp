@@ -752,7 +752,7 @@ struct FTData {
 static bool FindTarget(const D3DXVECTOR3 &center, CMatrixMapStatic *ms, uintptr_t user) {
     FTData *d = (FTData *)user;
 
-    if (ms->GetSide() == d->side)
+    if (SidesAllied(ms->GetSide(), d->side))
         return true;
 
     D3DXVECTOR3 dir(ms->GetGeoCenter() - center);
@@ -1278,7 +1278,7 @@ bool CMatrixCannon::Damage(EWeapon weap, const D3DXVECTOR3 &pos, const D3DXVECTO
     if (m_CurrState == CANNON_DIP)
         return true;
 
-    friendly_fire = (attacker_side != 0) && (attacker_side == m_Side);
+    friendly_fire = (attacker_side != 0) && SidesAllied(attacker_side, m_Side);
     damagek =
             (friendly_fire || m_Side != PLAYER_SIDE) ? 1.0f : g_MatrixMap->m_Difficulty.k_damage_enemy_to_player;
     if (friendly_fire && m_Side == PLAYER_SIDE)

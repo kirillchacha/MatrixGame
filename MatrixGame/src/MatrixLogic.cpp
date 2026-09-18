@@ -3132,6 +3132,12 @@ void CMatrixMapLogic::Takt(int step) {
             }
         }
 
+        // A defeated player can spectate while an allied side remains in battle.
+        bool *alive = (bool *)_alloca(sz);
+        for (int id = 0; id < cnt; ++id)
+            alive[id] = sides[id] && !sides2[id];
+        const auto result = g_MatchTeams.Result({alive, (size_t)cnt}, PLAYER_SIDE);
+
         // checking win/loose status
 
         if (m_BeforeWinLooseDialogCount > 1)
@@ -3157,7 +3163,8 @@ void CMatrixMapLogic::Takt(int step) {
                 m_BeforeWinLooseDialogCount = 1;
                 SETFLAG(m_Flags, MMFLAG_WIN);
             }
-            else if (GetPlayerSide()->GetStatus() == SS_JUST_DEAD) {
+            else if (result == CMatchTeams::Outcome::Lost &&
+                     (GetPlayerSide()->GetStatus() == SS_JUST_DEAD || GetPlayerSide()->GetStatus() == SS_NONE)) {
                 for (int i = 0; i < m_SideCnt; ++i) {
                     if (sides[m_Side[i].m_Id] && !sides2[m_Side[i].m_Id]) {
                         m_Side[i].SetStatValue(STAT_TIME, -m_Side[i].GetStatValue(STAT_TIME));
@@ -3169,18 +3176,14 @@ void CMatrixMapLogic::Takt(int step) {
                 RESETFLAG(m_Flags, MMFLAG_WIN);
             }
             else {
-                int acnt = 0;
+                // Side elimination remains individual; victory belongs to the alliance.
                 for (int i = 0; i < m_SideCnt; ++i) {
                     if (m_Side[i].GetStatus() == SS_JUST_DEAD) {
                         m_Side[i].SetStatus(SS_NONE);
                     }
-                    if (m_Side[i].GetStatus() == SS_ACTIVE) {
-                        ++acnt;
-                    }
                 }
-                if (acnt == 1 && g_MatrixMap->m_BeforeWinCount <= 0) {
-                    // only one side is active
-                    // it is player side. win!
+                if (result == CMatchTeams::Outcome::Won && g_MatrixMap->m_BeforeWinCount <= 0) {
+                    // No opposing alliance remains.
                     m_BeforeWinLooseDialogCount = 1;
                     SETFLAG(m_Flags, MMFLAG_WIN);
                 }

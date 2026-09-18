@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "MatchTeams.hpp"
+
 #include "VectorObject.hpp"
 #include "Effects/MatrixEffect.hpp"
 #include "Logic/MatrixRoadNetwork.hpp"

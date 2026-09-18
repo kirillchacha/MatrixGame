@@ -734,7 +734,7 @@ void CMatrixSideUnit::OnLButtonDown(const CPoint &) {
         }
         else if (FLAG(g_IFaceList->m_IfListFlags, PREORDER_CAPTURE)) {
             // Capture
-            if (IS_TRACE_STOP_OBJECT(pObject) && pObject->IsLiveBuilding() && pObject->GetSide() != PLAYER_SIDE) {
+            if (IS_TRACE_STOP_OBJECT(pObject) && pObject->IsLiveBuilding() && !SidesAllied(pObject->GetSide(), PLAYER_SIDE)) {
                 RESETFLAG(g_IFaceList->m_IfListFlags, PREORDER_CAPTURE | ORDERING_MODE);
 
                 PGOrderCapture(SelGroupToLogicGroup(), (CMatrixBuilding *)pObject);
@@ -865,12 +865,12 @@ void CMatrixSideUnit::OnRButtonDown(const CPoint &) {
 
     if (!IS_PREORDERING &&
         (m_CurrSel == GROUP_SELECTED || m_CurrSel == ROBOT_SELECTED || m_CurrSel == FLYER_SELECTED)) {
-        if (IS_TRACE_STOP_OBJECT(pObject) && pObject->IsLiveBuilding() && pObject->GetSide() != m_Id) {
+        if (IS_TRACE_STOP_OBJECT(pObject) && pObject->IsLiveBuilding() && !SidesAllied(pObject->GetSide(), m_Id)) {
             // Capture
             PGOrderCapture(SelGroupToLogicGroup(), (CMatrixBuilding *)pObject);
         }
         else if (IS_TRACE_STOP_OBJECT(pObject) &&
-                 ((IsLiveUnit(pObject) && pObject->GetSide() != m_Id) || pObject->IsSpecial())) {
+                 ((IsLiveUnit(pObject) && !SidesAllied(pObject->GetSide(), m_Id)) || pObject->IsSpecial())) {
             // Attack
             PGOrderAttack(SelGroupToLogicGroup(), GetMapPos(pObject), pObject);
         }
@@ -2687,7 +2687,7 @@ void CMatrixSideUnit::TaktHL() {
             float mst = 1e20f;
             if (m_Strength > 0)
                 for (i = 0; i < g_MatrixMap->m_SideCnt; i++) {
-                    if (g_MatrixMap->m_Side[i].m_Id == m_Id)
+                    if (SidesAllied(g_MatrixMap->m_Side[i].m_Id, m_Id))
                         continue;
                     if (g_MatrixMap->m_Side[i].GetStatus() == SS_NONE)
                         continue;
@@ -2704,7 +2704,7 @@ void CMatrixSideUnit::TaktHL() {
             if (m_WarSide < 0) {
                 mst = -1e20f;
                 for (i = 0; i < g_MatrixMap->m_SideCnt; i++) {
-                    if (g_MatrixMap->m_Side[i].m_Id == m_Id)
+                    if (SidesAllied(g_MatrixMap->m_Side[i].m_Id, m_Id))
                         continue;
                     if (g_MatrixMap->m_Side[i].GetStatus() == SS_NONE)
                         continue;
@@ -2720,7 +2720,7 @@ void CMatrixSideUnit::TaktHL() {
             int idx = 0;
             do {
                 idx = g_MatrixMap->Rnd(0, g_MatrixMap->m_SideCnt - 1);
-                if (m_Id != g_MatrixMap->m_Side[idx].m_Id && g_MatrixMap->m_Side[idx].GetStatus() != SS_NONE)
+                if (!SidesAllied(m_Id, g_MatrixMap->m_Side[idx].m_Id) && g_MatrixMap->m_Side[idx].GetStatus() != SS_NONE)
                     break;
             }
             while (--tries > 0);
@@ -2804,23 +2804,23 @@ void CMatrixSideUnit::TaktHL() {
                 if (i >= 0) {
                     if (((CMatrixBuilding *)ms)->m_Side == 0)
                         m_Region[i].m_NeutralBuildingCnt++;
-                    else if (((CMatrixBuilding *)ms)->m_Side != m_Id) {
+                    else if (!SidesAllied(ms->GetSide(), m_Id)) {
                         m_Region[i].m_EnemyBuildingCnt++;
                         if (ms->GetSide() == m_WarSide)
                             m_Region[i].m_WarEnemyBuildingCnt++;
                     }
-                    else
+                    else if (ms->GetSide() == m_Id)
                         m_Region[i].m_OurBuildingCnt++;
 
                     if (((CMatrixBuilding *)ms)->m_Kind == 0) {
                         if (((CMatrixBuilding *)ms)->m_Side == 0)
                             m_Region[i].m_NeutralBaseCnt++;
-                        else if (((CMatrixBuilding *)ms)->m_Side != m_Id) {
+                        else if (!SidesAllied(ms->GetSide(), m_Id)) {
                             m_Region[i].m_EnemyBaseCnt++;
                             if (ms->GetSide() == m_WarSide)
                                 m_Region[i].m_WarEnemyBaseCnt++;
                         }
-                        else {
+                        else if (ms->GetSide() == m_Id) {
                             ourbasecnt++;
                             m_Region[i].m_OurBaseCnt++;
                         }
@@ -2837,7 +2837,7 @@ void CMatrixSideUnit::TaktHL() {
                     if (i >= 0) {
                         if (ms->AsRobot()->m_Side == 0)
                             ;
-                        else if (ms->AsRobot()->m_Side != m_Id) {
+                        else if (!SidesAllied(ms->GetSide(), m_Id)) {
                             m_Region[i].m_EnemyRobotCnt++;
                             if (ms->GetSide() == m_WarSide)
                                 m_Region[i].m_WarEnemyRobotCnt++;
@@ -2901,7 +2901,7 @@ void CMatrixSideUnit::TaktHL() {
                         m_Region[i].m_NeutralCannonCnt++;
                         m_Region[i].m_DangerAdd += ((CMatrixCannon *)ms)->GetStrength() * m_DangerMul;
                     }
-                    else if (ms->GetSide() != m_Id) {
+                    else if (!SidesAllied(ms->GetSide(), m_Id)) {
                         m_Region[i].m_EnemyCannonCnt++;
                         if (ms->GetSide() == m_WarSide)
                             m_Region[i].m_WarEnemyCannonCnt++;
@@ -4763,7 +4763,7 @@ void CMatrixSideUnit::TaktTL() {
 
         obj = CMatrixMapStatic::GetFirstLogic();
         while (obj) {
-            if (IsLiveUnit(obj) && obj->GetSide() != m_Id) {
+            if (IsLiveUnit(obj) && !SidesAllied(obj->GetSide(), m_Id)) {
                 tp = GetMapPos(obj);
                 CRect rect(1000000000, 1000000000, -1000000000, -1000000000);
                 rect.left = std::min(rect.left, tp.x);
@@ -5132,7 +5132,7 @@ void CMatrixSideUnit::TaktTL() {
             // Распределяем кто какие заводы захватывает
             obj = CMatrixMapStatic::GetFirstLogic();
             while (obj) {
-                if (obj->IsLiveBuilding() && obj->GetSide() != m_Id && obj->AsBuilding()->CanBeCaptured()) {
+                if (obj->IsLiveBuilding() && !SidesAllied(obj->GetSide(), m_Id) && obj->AsBuilding()->CanBeCaptured()) {
                     i = GetRegion(GetMapPos(obj));
                     if (i == m_LogicGroup[g].m_Action.m_Region) {
                         CMatrixMapStatic *obj2 = CMatrixMapStatic::GetFirstLogic();
@@ -6905,7 +6905,7 @@ void CMatrixSideUnit::TaktPL(int onlygroup) {
 
         obj = CMatrixMapStatic::GetFirstLogic();
         while (obj) {
-            if (IsLiveUnit(obj) && obj->GetSide() != m_Id) {
+            if (IsLiveUnit(obj) && !SidesAllied(obj->GetSide(), m_Id)) {
                 tp = GetMapPos(obj);
                 CRect rect(1000000000, 1000000000, -1000000000, -1000000000);
                 rect.left = std::min(rect.left, tp.x);
@@ -7114,7 +7114,7 @@ void CMatrixSideUnit::TaktPL(int onlygroup) {
                         break;
                     }
                 }
-                if (m_PlayerGroup[i].m_Obj == obj && obj->IsLiveBuilding() && obj->GetSide() != m_Id)
+                if (m_PlayerGroup[i].m_Obj == obj && obj->IsLiveBuilding() && !SidesAllied(obj->GetSide(), m_Id))
                     t = 1;
                 obj = obj->GetNextLogic();
             }
@@ -7344,7 +7344,7 @@ void CMatrixSideUnit::TaktPL(int onlygroup) {
                         break;
                     }
                 }
-                if (m_PlayerGroup[i].m_Obj == obj && obj->IsLiveBuilding() && obj->GetSide() != m_Id)
+                if (m_PlayerGroup[i].m_Obj == obj && obj->IsLiveBuilding() && !SidesAllied(obj->GetSide(), m_Id))
                     t = 1;
                 obj = obj->GetNextLogic();
             }
@@ -9120,6 +9120,9 @@ void CMatrixSideUnit::SoundCapture(int pg) {
 }
 
 void CMatrixSideUnit::PGOrderCapture(int no, CMatrixBuilding *building) {
+    if (building != NULL && building->GetSide() != m_Id && SidesAllied(building->GetSide(), m_Id))
+        return;
+
     if (m_PlayerGroup[no].m_RobotCnt <= 0)
         return;
 
@@ -9185,6 +9188,9 @@ void CMatrixSideUnit::PGOrderCapture(int no, CMatrixBuilding *building) {
 }
 
 void CMatrixSideUnit::PGOrderAttack(int no, const CPoint &tp, CMatrixMapStatic *terget_obj) {
+    if (terget_obj != NULL && terget_obj->GetSide() != m_Id && SidesAllied(terget_obj->GetSide(), m_Id))
+        return;
+
     if (m_PlayerGroup[no].m_RobotCnt <= 0)
         return;
 
@@ -9347,6 +9353,9 @@ void CMatrixSideUnit::PGOrderRepair(int no, CMatrixMapStatic *terget_obj) {
 }
 
 void CMatrixSideUnit::PGOrderBomb(int no, const CPoint &tp, CMatrixMapStatic *terget_obj) {
+    if (terget_obj != NULL && terget_obj->GetSide() != m_Id && SidesAllied(terget_obj->GetSide(), m_Id))
+        return;
+
     if (m_PlayerGroup[no].m_RobotCnt <= 0)
         return;
 
@@ -9891,17 +9900,17 @@ void CMatrixSideUnit::PGCalcStat() {
                 if (i >= 0) {
                     if (((CMatrixBuilding *)ms)->m_Side == 0)
                         m_Region[i].m_NeutralBuildingCnt++;
-                    else if (((CMatrixBuilding *)ms)->m_Side != m_Id)
+                    else if (!SidesAllied(ms->GetSide(), m_Id))
                         m_Region[i].m_EnemyBuildingCnt++;
-                    else
+                    else if (ms->GetSide() == m_Id)
                         m_Region[i].m_OurBuildingCnt++;
 
                     if (((CMatrixBuilding *)ms)->m_Kind == 0) {
                         if (((CMatrixBuilding *)ms)->m_Side == 0)
                             m_Region[i].m_NeutralBaseCnt++;
-                        else if (((CMatrixBuilding *)ms)->m_Side != m_Id)
+                        else if (!SidesAllied(ms->GetSide(), m_Id))
                             m_Region[i].m_EnemyBaseCnt++;
-                        else
+                        else if (ms->GetSide() == m_Id)
                             m_Region[i].m_OurBaseCnt++;
                     }
                 }
@@ -9916,7 +9925,7 @@ void CMatrixSideUnit::PGCalcStat() {
                     if (i >= 0) {
                         if (ms->AsRobot()->m_Side == 0)
                             ;
-                        else if (ms->AsRobot()->m_Side != m_Id) {
+                        else if (!SidesAllied(ms->GetSide(), m_Id)) {
                             m_Region[i].m_EnemyRobotCnt++;
                             float d = ms->AsRobot()->GetStrength();
                             m_Region[i].m_Danger += d;
@@ -9936,7 +9945,7 @@ void CMatrixSideUnit::PGCalcStat() {
                         m_Region[i].m_NeutralCannonCnt++;
                         m_Region[i].m_DangerAdd += ((CMatrixCannon *)ms)->GetStrength();
                     }
-                    else if (ms->GetSide() != m_Id) {
+                    else if (!SidesAllied(ms->GetSide(), m_Id)) {
                         m_Region[i].m_EnemyCannonCnt++;
                         m_Region[i].m_DangerAdd += ((CMatrixCannon *)ms)->GetStrength();
                     }
@@ -10032,7 +10041,7 @@ void CMatrixSideUnit::PGFindCaptureFactory(int no) {
     if (strength >= m_Region[regionmass].m_Danger * 1.0) {  // Если регион слишком опасный, то пропускаем
         obj = CMatrixMapStatic::GetFirstLogic();
         while (obj) {
-            if (obj->IsLiveBuilding() && (obj->GetSide() != m_Id) && GetRegion(obj) == regionmass) {
+            if (obj->IsLiveBuilding() && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == regionmass) {
                 m_PlayerGroup[no].m_Obj = obj;
 
                 m_PlayerGroup[no].m_RegionPathCnt = 0;
@@ -10097,7 +10106,7 @@ void CMatrixSideUnit::PGFindCaptureFactory(int no) {
                 if (m_Region[u].m_EnemyBuildingCnt > 0 || m_Region[u].m_NeutralBuildingCnt > 0) {
                     obj = CMatrixMapStatic::GetFirstLogic();
                     while (obj) {
-                        if (obj->IsLiveBuilding() && (obj->GetSide() != m_Id) && GetRegion(obj) == u) {
+                        if (obj->IsLiveBuilding() && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == u) {
                             m_PlayerGroup[no].m_Obj = obj;
                             PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
@@ -10157,7 +10166,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
     // В текущем регионе
     obj = CMatrixMapStatic::GetFirstLogic();
     while (obj) {
-        if (IsLiveUnit(obj) && (obj->GetSide() != m_Id) && GetRegion(obj) == regionmass) {
+        if (IsLiveUnit(obj) && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == regionmass) {
             m_PlayerGroup[no].m_Obj = obj;
 
             m_PlayerGroup[no].m_RegionPathCnt = 0;
@@ -10221,7 +10230,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
                     m_Region[u].m_NeutralCannonCnt > 0) {
                     obj = CMatrixMapStatic::GetFirstLogic();
                     while (obj) {
-                        if (IsLiveUnit(obj) && (obj->GetSide() != m_Id) && GetRegion(obj) == u) {
+                        if (IsLiveUnit(obj) && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == u) {
                             m_PlayerGroup[no].m_Obj = obj;
                             PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
@@ -10275,7 +10284,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
             if (m_Region[u].m_EnemyBaseCnt > 0) {
                 obj = CMatrixMapStatic::GetFirstLogic();
                 while (obj) {
-                    if (obj->IsLiveBuilding() && obj->IsBase() && (obj->GetSide() != m_Id) && GetRegion(obj) == u) {
+                    if (obj->IsLiveBuilding() && obj->IsBase() && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == u) {
                         m_PlayerGroup[no].m_Obj = obj;
                         PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
@@ -10334,7 +10343,7 @@ void CMatrixSideUnit::PGFindDefenceTarget(int no) {
     // В текущем регионе
     obj = CMatrixMapStatic::GetFirstLogic();
     while (obj) {
-        if (IsLiveUnit(obj) && (obj->GetSide() != m_Id) && GetRegion(obj) == regionmass) {
+        if (IsLiveUnit(obj) && (!SidesAllied(obj->GetSide(), m_Id)) && GetRegion(obj) == regionmass) {
             m_PlayerGroup[no].m_Obj = obj;
             m_PlayerGroup[no].m_Region = regionmass;
 
@@ -10417,7 +10426,7 @@ void CMatrixSideUnit::PGFindDefenceTarget(int no) {
                 if (m_Region[u].m_OurBuildingCnt > 0 || m_Region[u].m_OurCannonCnt > 0) {
                     obj = CMatrixMapStatic::GetFirstLogic();
                     while (obj) {
-                        if (obj->IsLiveRobot() && (obj->GetSide() != m_Id)) {
+                        if (obj->IsLiveRobot() && (!SidesAllied(obj->GetSide(), m_Id))) {
                             CPoint tp;
                             if (!obj->AsRobot()->GetMoveToCoords(tp))
                                 tp = GetMapPos(obj);

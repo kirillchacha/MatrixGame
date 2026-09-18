@@ -28,8 +28,8 @@ using Base::CRect;
 
 SMatchChoice g_MatchChoice{L"", PLAYER_SIDE_DEFAULT, false};
 
-#define MENU_FONT       L"Font.2Normal"
-#define MENU_FONT_SMALL L"Font.2Small"
+#define MENU_FONT       L"Font.MenuNormal"
+#define MENU_FONT_SMALL L"Font.MenuSmall"
 
 #define MENU_COLOR_BACK      0xFF0F1419
 #define MENU_COLOR_PANEL     0xFF182027
@@ -40,7 +40,7 @@ SMatchChoice g_MatchChoice{L"", PLAYER_SIDE_DEFAULT, false};
 #define MENU_COLOR_ACCENT    0xFFCAEE78
 #define MENU_COLOR_DISABLED  0xFF4B5A62
 
-#define MENU_ROW_HEIGHT 24
+#define MENU_ROW_HEIGHT 32
 #define MENU_PAD        20
 
 static const wchar *MENU_MAP_FOLDER = L"Matrix\\Map";
@@ -242,6 +242,15 @@ void CFormMenu::LoadPreview(void) {
 
     try {
         tex->Preload();
+        CFile file(found);
+        file.OpenRead();
+        std::vector<BYTE> bytes(file.Size());
+        file.Read(bytes.data(), (DWORD)bytes.size());
+        D3DXIMAGE_INFO info{};
+        if (FAILED(D3DXGetImageInfoFromFileInMemory(bytes.data(), (UINT)bytes.size(), &info)))
+            throw std::runtime_error("Cannot read map preview dimensions.");
+        m_PreviewSize = CPoint(std::min((int)info.Width, tex->GetSizeX()),
+                               std::min((int)info.Height, tex->GetSizeY()));
     }
     catch (...) {
         // A broken picture is no reason to keep the player out of the map.
@@ -280,114 +289,119 @@ void CFormMenu::BuildTexture(void) {
     bmp.CreateRGBA(w, h);
     bmp.Fill(CPoint(0, 0), CPoint(w, h), MENU_COLOR_BACK);
 
-    const int list_w = std::min(420, w / 2 - MENU_PAD * 2);
-    const int list_x = MENU_PAD * 2;
-    const int list_y = MENU_PAD * 4;
-    const int right_x = list_x + list_w + MENU_PAD * 3;
-    const int right_w = std::max(200, w - right_x - MENU_PAD * 2);
+    const int pad = w < 900 ? 24 : 40;
+    const int list_x = pad;
+    const int list_y = 112;
+    const int list_w = std::min(360, w / 3);
+    const int right_x = list_x + list_w + 28;
+    const int right_w = w - right_x - pad;
+    const int bottom = h - 76;
 
-    DrawString(bmp, list_x, MENU_PAD, w - list_x, MENU_ROW_HEIGHT + 4, L"ПЛАНЕТАРНЫЕ БОИ", MENU_COLOR_ACCENT);
+    // Restrained tactical display: slate panels, fine grid and a single lime accent.
+    for (int y = 0; y < h; y += 48)
+        FillRect(bmp, CRect(0, y, w, y + 1), 0xFF141C23);
+    FillRect(bmp, CRect(0, 0, 6, h), MENU_COLOR_ACCENT);
+    DrawString(bmp, list_x, 18, w - 2 * pad, 34, L"ПЛАНЕТАРНЫЕ БОИ", MENU_COLOR_ACCENT, L"Font.MenuTitle");
+    DrawString(bmp, list_x, 54, w - 2 * pad, 22, L"ПОДГОТОВКА ОПЕРАЦИИ / ЛОКАЛЬНЫЙ БОЙ", MENU_COLOR_DIM, MENU_FONT_SMALL);
+    FillRect(bmp, CRect(pad, 88, w - pad, 89), MENU_COLOR_LINE);
 
-    m_MapRows = std::max(1, (h - list_y - MENU_PAD * 5) / MENU_ROW_HEIGHT);
-
-    // Map list
-    DrawString(bmp, list_x, list_y - MENU_ROW_HEIGHT, list_w, MENU_ROW_HEIGHT, L"КАРТА", MENU_COLOR_DIM,
-               MENU_FONT_SMALL);
-    FillRect(bmp, CRect(list_x, list_y, list_x + list_w, list_y + m_MapRows * MENU_ROW_HEIGHT), MENU_COLOR_PANEL);
-
+    DrawString(bmp, list_x, list_y - 24, list_w, 24,
+               utils::format(L"01 / КАРТА   ·   %d", (int)m_Maps.size()), MENU_COLOR_DIM, MENU_FONT_SMALL);
+    m_MapRows = std::max(1, (bottom - list_y - 30) / MENU_ROW_HEIGHT);
+    m_MapTop = std::clamp(m_MapTop, 0, std::max(0, (int)m_Maps.size() - m_MapRows));
+    const int list_bottom = list_y + m_MapRows * MENU_ROW_HEIGHT;
+    FillRect(bmp, CRect(list_x, list_y, list_x + list_w, list_bottom), MENU_COLOR_PANEL);
     m_MapRects.clear();
     for (int row = 0; row < m_MapRows; ++row) {
-        int index = m_MapTop + row;
-        CRect r(list_x, list_y + row * MENU_ROW_HEIGHT, list_x + list_w, list_y + (row + 1) * MENU_ROW_HEIGHT);
+        const int index = m_MapTop + row;
+        CRect r(list_x, list_y + row * MENU_ROW_HEIGHT, list_x + list_w - 8,
+                list_y + (row + 1) * MENU_ROW_HEIGHT);
         m_MapRects.push_back(r);
-
         if (index >= (int)m_Maps.size())
             continue;
-
-        if (index == m_MapSel)
-            FillRect(bmp, r, MENU_COLOR_SELECTED);
-
-        DrawString(bmp, r.left + 10, r.top, list_w - 20, MENU_ROW_HEIGHT, m_Maps[index].m_Name,
-                   index == m_MapSel ? MENU_COLOR_ACCENT : MENU_COLOR_TEXT);
+        const bool selected = index == m_MapSel;
+        if (selected || m_Hover == row)
+            FillRect(bmp, r, selected ? MENU_COLOR_SELECTED : 0xFF202D36);
+        if (selected)
+            FillRect(bmp, CRect(r.left, r.top + 5, r.left + 3, r.bottom - 5), MENU_COLOR_ACCENT);
+        DrawString(bmp, r.left + 14, r.top, list_w - 30, MENU_ROW_HEIGHT, m_Maps[index].m_Name,
+                   selected ? MENU_COLOR_ACCENT : MENU_COLOR_TEXT);
     }
-
     if (!m_Maps.empty()) {
-        DrawString(bmp, list_x, list_y + m_MapRows * MENU_ROW_HEIGHT + 4, list_w, MENU_ROW_HEIGHT,
-                   utils::format(L"%d / %d", m_MapSel + 1, (int)m_Maps.size()), MENU_COLOR_DIM, MENU_FONT_SMALL);
-    }
-    else {
-        DrawString(bmp, list_x + 10, list_y, list_w - 20, MENU_ROW_HEIGHT, L"Карты не найдены", MENU_COLOR_DISABLED);
+        const int track = list_bottom - list_y;
+        const int thumb = std::max(16, track * std::min(m_MapRows, (int)m_Maps.size()) / (int)m_Maps.size());
+        const int offset = (int)m_Maps.size() > m_MapRows
+            ? (track - thumb) * m_MapTop / ((int)m_Maps.size() - m_MapRows) : 0;
+        FillRect(bmp, CRect(list_x + list_w - 4, list_y + offset, list_x + list_w - 2,
+                           list_y + offset + thumb), MENU_COLOR_ACCENT);
+        DrawString(bmp, list_x, list_bottom + 6, list_w, 24,
+                   utils::format(L"%02d / %02d    Колесо — листать", m_MapSel + 1, (int)m_Maps.size()),
+                   MENU_COLOR_DIM, MENU_FONT_SMALL);
     }
 
-    // Sides
-    DrawString(bmp, right_x, list_y - MENU_ROW_HEIGHT, right_w, MENU_ROW_HEIGHT, L"СТОРОНА", MENU_COLOR_DIM,
-               MENU_FONT_SMALL);
+    const int preview_bottom = std::max(list_y + 100, h - 414);
+    DrawString(bmp, right_x, list_y - 24, right_w, 24,
+               m_Maps.empty() ? L"Карты не найдены" : m_Maps[m_MapSel].m_Name,
+               MENU_COLOR_TEXT);
+    FillRect(bmp, CRect(right_x - 1, list_y - 1, right_x + right_w + 1, preview_bottom + 1), MENU_COLOR_LINE);
+    m_PreviewRect = CRect(right_x, list_y, right_x + right_w, preview_bottom);
+    FillRect(bmp, m_PreviewRect, MENU_COLOR_PANEL);
+    if (!m_Preview)
+        DrawString(bmp, right_x, (list_y + preview_bottom) / 2 - 12, right_w, 24,
+                   L"Разведданные отсутствуют", MENU_COLOR_DIM, MENU_FONT, 1);
 
+    const int mode_y = preview_bottom + 30;
+    DrawString(bmp, right_x, mode_y - 24, right_w, 24, L"02 / ПРАВИЛА БОЯ", MENU_COLOR_DIM, MENU_FONT_SMALL);
+    const int mode_w = (right_w - 8) / 2;
+    for (int i = 0; i < 2; ++i) {
+        m_ModeRects[i] = CRect(right_x + i * (mode_w + 8), mode_y,
+                               right_x + i * (mode_w + 8) + mode_w, mode_y + 32);
+        const bool selected = m_TeamMode == (i == 1);
+        FillRect(bmp, m_ModeRects[i], selected ? MENU_COLOR_SELECTED : MENU_COLOR_PANEL);
+        if (selected)
+            FillRect(bmp, CRect(m_ModeRects[i].left, mode_y + 30, m_ModeRects[i].right, mode_y + 32), MENU_COLOR_ACCENT);
+        DrawString(bmp, m_ModeRects[i].left, mode_y, mode_w, 30,
+                   i == 0 ? L"Все против всех" : L"Командный бой",
+                   selected ? MENU_COLOR_ACCENT : MENU_COLOR_DIM, MENU_FONT, 1);
+    }
+    const int sides_y = mode_y + 64;
+    DrawString(bmp, right_x, sides_y - 26, right_w, 24, L"03 / ВАШ ЦВЕТ И СОСТАВ КОМАНД", MENU_COLOR_DIM, MENU_FONT_SMALL);
     static const std::vector<int> no_sides;
-    const std::vector<int> &sides = m_Maps.empty() ? no_sides : m_Maps[m_MapSel].m_Sides;
-
+    const auto &sides = m_Maps.empty() ? no_sides : m_Maps[m_MapSel].m_Sides;
+    const int team_w = std::min(150, right_w / 3);
     for (int i = 0; i < 4; ++i) {
-        int id = i + 1;
-        int top = list_y + i * (MENU_ROW_HEIGHT + 8);
-        m_SideRects[i] = CRect(right_x, top, right_x + right_w, top + MENU_ROW_HEIGHT);
-
+        const int id = i + 1;
+        const int y = sides_y + i * 40;
+        const bool available = std::find(sides.begin(), sides.end(), id) != sides.end();
+        const bool selected = id == m_SideSel;
         std::wstring name;
         DWORD color = MENU_COLOR_DISABLED;
-        if (!GetSideInfo(id, name, color))
-            continue;
-
-        const bool available = std::find(sides.begin(), sides.end(), id) != sides.end();
-
-        FillRect(bmp, m_SideRects[i], id == m_SideSel ? MENU_COLOR_SELECTED : MENU_COLOR_PANEL);
-        FillRect(bmp, CRect(right_x + 6, top + 5, right_x + 6 + 14, top + MENU_ROW_HEIGHT - 5),
-                 available ? color : MENU_COLOR_DISABLED);
-
-        DrawString(bmp, right_x + 30, top, right_w - 40, MENU_ROW_HEIGHT,
-                   available ? name : name + L" — нет войск на карте",
-                   available ? (id == m_SideSel ? MENU_COLOR_ACCENT : MENU_COLOR_TEXT) : MENU_COLOR_DISABLED);
+        GetSideInfo(id, name, color);
+        m_SideRects[i] = CRect(right_x, y, right_x + right_w - team_w - 8, y + 34);
+        m_TeamRects[i] = CRect(right_x + right_w - team_w, y, right_x + right_w, y + 34);
+        FillRect(bmp, m_SideRects[i], selected ? MENU_COLOR_SELECTED : MENU_COLOR_PANEL);
+        FillRect(bmp, CRect(right_x + 10, y + 10, right_x + 24, y + 24), available ? color : MENU_COLOR_DISABLED);
+        DrawString(bmp, right_x + 34, y, m_SideRects[i].right - right_x - 38, 34,
+                   name + (available ? (selected ? L" / ВЫ" : L" / ИИ") : L" / нет войск"),
+                   available ? MENU_COLOR_TEXT : MENU_COLOR_DISABLED, MENU_FONT_SMALL);
+        FillRect(bmp, m_TeamRects[i], available && m_TeamMode ? MENU_COLOR_SELECTED : MENU_COLOR_PANEL);
+        DrawString(bmp, m_TeamRects[i].left, y, team_w, 34,
+                   !available ? L"—" : m_TeamMode ? utils::format(L"Команда %d  >", m_Teams.teams[id]) : L"Сам за себя",
+                   available && m_TeamMode ? MENU_COLOR_ACCENT : MENU_COLOR_DIM, MENU_FONT_SMALL, 1);
     }
-
-    // Buttons
-    const int btn_y = list_y + 4 * (MENU_ROW_HEIGHT + 8) + MENU_PAD * 2;
-    const int btn_w = std::min(220, right_w);
-
-    m_StartRect = CRect(right_x, btn_y, right_x + btn_w, btn_y + MENU_ROW_HEIGHT + 10);
-    m_ExitRect = CRect(right_x, btn_y + MENU_ROW_HEIGHT + 20, right_x + btn_w, btn_y + 2 * MENU_ROW_HEIGHT + 30);
-
-    const bool can_start = !m_Maps.empty() && m_SideSel != 0;
-
-    FillRect(bmp, m_StartRect, can_start ? MENU_COLOR_ACCENT : MENU_COLOR_PANEL);
-    DrawString(bmp, m_StartRect.left, m_StartRect.top, btn_w, MENU_ROW_HEIGHT + 10, L"НАЧАТЬ БОЙ",
-               can_start ? MENU_COLOR_BACK : MENU_COLOR_DISABLED, MENU_FONT, 1);
-
+    const bool can_start = CanStart();
+    DrawString(bmp, right_x, sides_y + 161, right_w, 24,
+               m_TeamMode ? (can_start ? L"Одна команда — союзники. Нажмите номер для смены." : L"Назначьте хотя бы одну сторону в другую команду.")
+                          : L"Выберите цвет. Остальными сторонами управляет ИИ.",
+               can_start ? MENU_COLOR_DIM : MENU_COLOR_ACCENT, MENU_FONT_SMALL);
+    const int exit_w = 100;
+    m_ExitRect = CRect(pad, h - 56, pad + exit_w, h - 20);
+    m_StartRect = CRect(right_x, h - 56, right_x + right_w, h - 20);
     FillRect(bmp, m_ExitRect, MENU_COLOR_PANEL);
-    DrawString(bmp, m_ExitRect.left, m_ExitRect.top, btn_w, MENU_ROW_HEIGHT + 10, L"ВЫХОД", MENU_COLOR_TEXT, MENU_FONT,
-               1);
-
-    // Map picture. Drawn as its own quad in Draw(), here we only lay out and frame its place.
-    const int prev_top = m_ExitRect.bottom + MENU_PAD * 2;
-    const int prev_bottom = h - MENU_PAD * 4;
-    const int prev_w = std::min(right_w, 480);
-
-    if (prev_bottom - prev_top >= 100 && prev_w >= 160) {
-        m_PreviewRect = CRect(right_x, prev_top, right_x + prev_w, prev_bottom);
-
-        DrawString(bmp, right_x, prev_top - MENU_ROW_HEIGHT, prev_w, MENU_ROW_HEIGHT, L"ВИД КАРТЫ", MENU_COLOR_DIM,
-                   MENU_FONT_SMALL);
-        FillRect(bmp, m_PreviewRect, MENU_COLOR_PANEL);
-
-        if (m_Preview == NULL) {
-            DrawString(bmp, right_x, (prev_top + prev_bottom - MENU_ROW_HEIGHT) / 2, prev_w, MENU_ROW_HEIGHT,
-                       L"Нет изображения", MENU_COLOR_DISABLED, MENU_FONT, 1);
-        }
-    }
-    else {
-        m_PreviewRect = CRect(0, 0, 0, 0);
-    }
-
-    FillRect(bmp, CRect(list_x, h - MENU_PAD * 2 - 1, w - MENU_PAD * 2, h - MENU_PAD * 2), MENU_COLOR_LINE);
-    DrawString(bmp, list_x, h - MENU_PAD * 2, w - list_x, MENU_ROW_HEIGHT,
-               L"Стрелки — выбор, Enter — начать, Esc — выход", MENU_COLOR_DIM, MENU_FONT_SMALL);
+    DrawString(bmp, pad, h - 56, exit_w, 36, L"ВЫХОД", MENU_COLOR_DIM, MENU_FONT_SMALL, 1);
+    FillRect(bmp, m_StartRect, can_start ? MENU_COLOR_ACCENT : MENU_COLOR_PANEL);
+    DrawString(bmp, right_x, h - 56, right_w, 36, L"НАЧАТЬ БОЙ  /  ENTER",
+               can_start ? MENU_COLOR_BACK : MENU_COLOR_DISABLED, MENU_FONT, 1);
 
     CTextureManaged *tex = CACHE_CREATE_TEXTUREMANAGED();
     tex->MipmapOff();
@@ -452,9 +466,11 @@ void CFormMenu::Draw(void) {
         // Fit the picture into its panel without stretching it.
         const float box_w = float(m_PreviewRect.right - m_PreviewRect.left);
         const float box_h = float(m_PreviewRect.bottom - m_PreviewRect.top);
-        const float scale = std::min(box_w / float(m_Preview->GetSizeX()), box_h / float(m_Preview->GetSizeY()));
-        const float pic_w = float(m_Preview->GetSizeX()) * scale;
-        const float pic_h = float(m_Preview->GetSizeY()) * scale;
+        const float scale = std::min(box_w / float(m_PreviewSize.x), box_h / float(m_PreviewSize.y));
+        const float pic_w = float(m_PreviewSize.x) * scale;
+        const float pic_h = float(m_PreviewSize.y) * scale;
+        v[2].tu = v[3].tu = float(m_PreviewSize.x) / float(m_Preview->GetSizeX());
+        v[0].tv = v[2].tv = float(m_PreviewSize.y) / float(m_Preview->GetSizeY());
         const float left = float(m_PreviewRect.left) + (box_w - pic_w) * 0.5f - 0.5f;
         const float top = float(m_PreviewRect.top) + (box_h - pic_h) * 0.5f - 0.5f;
 
@@ -479,7 +495,16 @@ void CFormMenu::Draw(void) {
 
 void CFormMenu::Takt([[maybe_unused]] int step) {}
 
-void CFormMenu::MouseMove([[maybe_unused]] int x, [[maybe_unused]] int y) {}
+void CFormMenu::MouseMove(int x, int y) {
+    int hover = -1;
+    for (int i = 0; i < (int)m_MapRects.size(); ++i)
+        if (m_MapRects[i].IsInRect(CPoint(x, y)))
+            hover = i;
+    if (hover != m_Hover) {
+        m_Hover = hover;
+        m_Dirty = true;
+    }
+}
 
 void CFormMenu::MouseKey(ButtonStatus status, int key, int x, int y) {
     DTRACE();
@@ -504,6 +529,23 @@ void CFormMenu::MouseKey(ButtonStatus status, int key, int x, int y) {
         if (index < (int)m_Maps.size())
             SelectMap(index);
         return;
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (m_ModeRects[i].IsInRect(pos)) {
+            if (m_TeamMode != (i == 1))
+                ToggleMode();
+            return;
+        }
+    }
+    if (m_TeamMode && !m_Maps.empty()) {
+        for (int id : m_Maps[m_MapSel].m_Sides) {
+            if (m_TeamRects[id - 1].IsInRect(pos)) {
+                m_Teams.teams[id] = m_Teams.teams[id] % 4 + 1;
+                m_Dirty = true;
+                return;
+            }
+        }
     }
 
     for (int i = 0; i < 4; ++i) {
@@ -585,11 +627,12 @@ void CFormMenu::Keyboard(bool down, uint8_t vk) {
 void CFormMenu::SystemEvent([[maybe_unused]] ESysEvent se) {}
 
 void CFormMenu::Start(void) {
-    if (m_Maps.empty() || m_SideSel == 0)
+    if (!CanStart())
         return;
 
     g_MatchChoice.m_Map = m_Maps[m_MapSel].m_Path;
     g_MatchChoice.m_SideId = m_SideSel;
+    g_MatchChoice.m_Teams = m_TeamMode ? m_Teams : CMatchTeams{};
     g_MatchChoice.m_Start = true;
 
     // Loading a map clears the cache, which owns our texture. Let go of it before that happens, or
@@ -607,4 +650,21 @@ void CFormMenu::Quit(void) {
     m_Dirty = true;
 
     SETFLAG(g_Flags, GFLAG_EXITLOOP);
+}
+
+bool CFormMenu::CanStart() const {
+    if (m_Maps.empty() || m_SideSel == 0)
+        return false;
+    return !m_TeamMode || m_Teams.HasOpponent(m_Maps[m_MapSel].m_Sides, m_SideSel);
+}
+
+void CFormMenu::ToggleMode() {
+    m_TeamMode = !m_TeamMode;
+    if (m_TeamMode && !m_Maps.empty()) {
+        // Split the actual participants, including maps with missing colours.
+        int index = 0;
+        for (int id : m_Maps[m_MapSel].m_Sides)
+            m_Teams.teams[id] = index++ % 2 + 1;
+    }
+    m_Dirty = true;
 }

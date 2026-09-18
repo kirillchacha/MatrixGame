@@ -1837,7 +1837,7 @@ bool CMatrixRobotAI::Damage(
     if (weap == WEAPON_INSTANT_DEATH)
         goto inst_death;
 
-    friendly_fire = (attacker_side != 0) && (attacker_side == m_Side);
+    friendly_fire = (attacker_side != 0) && SidesAllied(attacker_side, m_Side);
 
     damagek =
             (friendly_fire || m_Side != PLAYER_SIDE) ? 1.0f : g_MatrixMap->m_Difficulty.k_damage_enemy_to_player;
@@ -1868,7 +1868,7 @@ bool CMatrixRobotAI::Damage(
     }
 
 #endif
-    if (!friendly_fire && attaker != NULL && attaker->IsLiveCannon() && attaker->AsCannon()->GetSide() != GetSide()) {
+    if (!friendly_fire && attaker != NULL && attaker->IsLiveCannon() && !SidesAllied(attaker->AsCannon()->GetSide(), GetSide())) {
         if (!GetEnv()->SearchEnemy(attaker))
             GetEnv()->AddToList(attaker);
 
@@ -4082,7 +4082,7 @@ void CMatrixRobotAI::HitTo(
             GetEnv()->m_LastHitEnemy = GetEnv()->m_LastHitTarget = g_MatrixMap->GetTime();
         else if (hit->GetObjectType() == OBJECT_TYPE_BUILDING)
             ;
-        else if (hit->GetSide() != GetSide())
+        else if (!SidesAllied(hit->GetSide(), GetSide()))
             GetEnv()->m_LastHitEnemy = g_MatrixMap->GetTime();
         else
             GetEnv()->m_LastHitFriendly = g_MatrixMap->GetTime();
@@ -4096,7 +4096,7 @@ void CMatrixRobotAI::HitTo(
             OBJECT_TYPE_ROBOTAI) {  // Если робот стреляет в пушку и мы в него попали то робот переключается на нас.
             CMatrixRobotAI *robot = (CMatrixRobotAI *)hit;
 
-            if (robot != this && robot->GetSide() != GetSide() && !robot->m_Environment.SearchEnemy(this))
+            if (robot != this && !SidesAllied(robot->GetSide(), GetSide()) && !robot->m_Environment.SearchEnemy(this))
                 robot->m_Environment.AddToList(this);
 
             if (robot->GetEnv()->m_TargetAttack != NULL &&
@@ -4428,7 +4428,7 @@ void CMatrixRobotAI::GatherInfo(int type) {
         // Look
         while (obj) {
             DCP();
-            if (obj->IsLiveRobot() && obj != this && obj->GetSide() != m_Side) {
+            if (obj->IsLiveRobot() && obj != this && !SidesAllied(obj->GetSide(), m_Side)) {
                 CMatrixRobotAI *robot = (CMatrixRobotAI *)obj;
                 D3DXVECTOR3 enemy_napr = D3DXVECTOR3(robot->m_PosX, robot->m_PosY, 0) - D3DXVECTOR3(m_PosX, m_PosY, 0);
 
@@ -4503,7 +4503,7 @@ void CMatrixRobotAI::GatherInfo(int type) {
                 DCP();
             }
             else if (obj->IsLiveCannon() && obj->AsCannon()->m_CurrState != CANNON_UNDER_CONSTRUCTION &&
-                     obj->GetSide() != m_Side) {
+                     !SidesAllied(obj->GetSide(), m_Side)) {
                 CMatrixCannon *cannon = (CMatrixCannon *)obj;
                 D3DXVECTOR3 enemy_napr = cannon->GetGeoCenter() - D3DXVECTOR3(m_PosX, m_PosY, 0);
 
@@ -4602,7 +4602,7 @@ void CMatrixRobotAI::GatherInfo(int type) {
                     CEnemy *enemie = obj->AsRobot()->m_Environment.m_FirstEnemy;
                     while (enemie) {
                         DCP();
-                        if (enemie->GetEnemy()->GetSide() != GetSide()) {
+                        if (!SidesAllied(enemie->GetEnemy()->GetSide(), GetSide())) {
                             if (!enemie->m_DelSlowly)
                                 m_Environment.AddToListSlowly(enemie->GetEnemy());
                         }
@@ -4614,7 +4614,7 @@ void CMatrixRobotAI::GatherInfo(int type) {
                     CEnemy *enemie = obj->AsRobot()->m_Environment.m_FirstEnemy;
                     while (enemie) {
                         DCP();
-                        if (enemie->GetEnemy()->GetSide() != GetSide()) {
+                        if (!SidesAllied(enemie->GetEnemy()->GetSide(), GetSide())) {
                             if (!enemie->m_DelSlowly)
                                 m_Environment.AddToListSlowly(enemie->GetEnemy());
                         }
@@ -4880,6 +4880,8 @@ struct SSeekCaptureMeB {
 };
 
 void CMatrixRobotAI::CaptureFactory(CMatrixBuilding *factory) {
+    if (factory == NULL || SidesAllied(factory->GetSide(), m_Side))
+        return;
     DTRACE();
 
     RemoveOrder(ROT_CAPTURE_FACTORY);
@@ -4933,7 +4935,7 @@ void CMatrixRobotAI::TaktCaptureCandidate(int ms) {
         m_CaptureCandidates[i].tbc -= ms;
         if (m_CaptureCandidates[i].tbc < 0) {
             CMatrixBuilding *b = (CMatrixBuilding *)m_CaptureCandidates[i].bcore->m_Object;
-            if (b != NULL && b->m_Side != m_Side) {
+            if (b != NULL && !SidesAllied(b->m_Side, m_Side)) {
                 if (b->m_Capturer == NULL) {
                     if (bc) {
                         if (bc->m_TurretsHave > b->m_TurretsHave)

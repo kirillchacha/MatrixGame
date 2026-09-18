@@ -128,6 +128,9 @@ Font& GetFont(IDirect3DDevice9* device, std::wstring_view font_name)
         fonts.emplace(L"Font.2Small",  loadFont(device, L"Verdana", 13));
         fonts.emplace(L"Font.2Normal", loadFont(device, L"Verdana", 14));
         fonts.emplace(L"Font.2Ranger", loadFont(device, L"Rangers", 10));
+        fonts.emplace(L"Font.MenuTitle", loadFont(device, L"Segoe UI", 28));
+        fonts.emplace(L"Font.MenuNormal", loadFont(device, L"Segoe UI", 18));
+        fonts.emplace(L"Font.MenuSmall", loadFont(device, L"Segoe UI", 15));
         return fonts;
     }();
 

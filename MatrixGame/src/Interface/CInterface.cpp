@@ -3573,7 +3573,7 @@ void CIFaceList::LogicTakt(int ms) {
                 if (/*под прицелом находится не игроковское здание*/ IS_TRACE_STOP_OBJECT(
                             g_MatrixMap->m_TraceStopObj) &&
                     g_MatrixMap->m_TraceStopObj->GetObjectType() == OBJECT_TYPE_BUILDING &&
-                    g_MatrixMap->m_TraceStopObj->GetSide() != PLAYER_SIDE) {
+                    !SidesAllied(g_MatrixMap->m_TraceStopObj->GetSide(), PLAYER_SIDE)) {
                     //устанавливаем курсор CROSS_RED
                     g_MatrixMap->m_Cursor.Select(CURSOR_CROSS_RED);
                 }

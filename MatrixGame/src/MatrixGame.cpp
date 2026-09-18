@@ -105,6 +105,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
 
             if (!FLAG(g_Flags, GFLAG_APPCLOSE) && g_MatchChoice.m_Start)
             {
+                g_MatchTeams = g_MatchChoice.m_Teams;
                 CGame::StartMatch(g_MatchChoice.m_Map.c_str(), g_MatchChoice.m_SideId);
 
                 formgame = HNew(NULL) CFormMatrixGame();

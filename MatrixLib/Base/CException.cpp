@@ -36,8 +36,10 @@ CExceptionStr::CExceptionStr(
     const wchar_t *str2)
 : CException(file, line)
 {
-    m_str = str;
-    m_str += str2;
+    if (str)
+        m_str = str;
+    if (str2)
+        m_str += str2;
 }
 
 std::wstring CExceptionStr::Info() const

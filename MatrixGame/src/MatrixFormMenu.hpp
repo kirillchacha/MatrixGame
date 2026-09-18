@@ -7,6 +7,7 @@
 
 #include "Form.hpp"
 #include "BaseDef.hpp"
+#include "MatchTeams.hpp"
 
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@ struct SMatchChoice {
     std::wstring m_Map;  // map path inside the package, ready for CGame::StartMatch()
     int m_SideId;        // side id from the "Side" config block
     bool m_Start;        // false means the player chose to quit instead
+    CMatchTeams m_Teams;
 };
 
 /**
@@ -48,6 +50,14 @@ class CFormMenu : public CForm {
     int m_MapTop;    // first visible row
     int m_MapRows;   // visible rows, depends on the screen height
     int m_SideSel;   // side id, 0 when the current map offers none
+    bool m_TeamMode = false;
+    CMatchTeams m_Teams;
+    Base::CRect m_ModeRects[2];
+    Base::CRect m_TeamRects[4];
+    int m_Hover = -1;
+
+    bool CanStart() const;
+    void ToggleMode();
 
     std::vector<Base::CRect> m_MapRects;   // hit areas, m_MapRects[i] belongs to row m_MapTop + i
     Base::CRect m_SideRects[4];
@@ -56,6 +66,7 @@ class CFormMenu : public CForm {
 
     CTextureManaged *m_Texture;
     CTextureManaged *m_Preview;    // picture of the selected map, NULL when the package has none
+    Base::CPoint m_PreviewSize{0, 0}; // image dimensions before D3D pads to a power of two
     Base::CRect m_PreviewRect;     // where Draw() puts the picture, laid out by BuildTexture()
     bool m_Dirty;  // selection changed, the screen sized texture has to be rebuilt
 

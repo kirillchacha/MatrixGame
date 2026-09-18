@@ -290,7 +290,7 @@ bool CMatrixBuilding::Damage(
     if (m_State == BUILDING_DIP || m_State == BUILDING_DIP_EXPLODED)
         return true;
 
-    bool friendly_fire = (attacker_side != 0) && (attacker_side == m_Side);
+    bool friendly_fire = (attacker_side != 0) && SidesAllied(attacker_side, m_Side);
     float damagek =
             (friendly_fire || m_Side != PLAYER_SIDE) ? 1.0f : g_MatrixMap->m_Difficulty.k_damage_enemy_to_player;
     if (friendly_fire && m_Side == PLAYER_SIDE)
@@ -481,7 +481,7 @@ static bool FindCaptureMe(
 
     CMatrixBuilding *b = (CMatrixBuilding *)user;
 
-    if (ms->AsRobot()->m_Side != b->m_Side)
+    if (!SidesAllied(ms->AsRobot()->m_Side, b->m_Side))
         ms->AsRobot()->AddCaptureCandidate(b);
     return true;
 }
@@ -561,7 +561,7 @@ void CMatrixBuilding::LogicTakt(int cms) {
                 g_MatrixMap->FindObjects(m_Pos, CAPTURE_RADIUS, 1, TRACE_ROBOT, NULL, FindRobotForCaptureAny,
                                          (uintptr_t)&data);
 
-                if (data.found && m_Side != data.found->GetSide()) {
+                if (data.found && !SidesAllied(m_Side, data.found->GetSide())) {
                     Capture(data.found);
 
                     int nt = 100;
@@ -1105,6 +1105,8 @@ void CMatrixBuilding::SetNeutral(void) {
 }
 
 ECaptureStatus CMatrixBuilding::Capture(CMatrixRobotAI *by) {
+    if (by != NULL && SidesAllied(m_Side, by->GetSide()))
+        return CAPTURE_BUSY;
     if (m_InCaptureTime <= 0) {
         m_InCaptureTime = g_Config.m_CaptureTimeErase + g_Config.m_CaptureTimePaint;
         m_InCaptureNextTimeErase = g_MatrixMap->GetTime();
