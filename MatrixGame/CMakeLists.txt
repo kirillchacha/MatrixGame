@@ -100,6 +100,8 @@ target_link_options(
     MatrixGame
     PRIVATE
         ${LINK_OPTIONS}
+        "$<$<C_COMPILER_ID:MSVC>:/DEBUG:FULL>"
+        "$<$<C_COMPILER_ID:MSVC>:/MAP>"
 )
 
 # Copy the CFG directory from the MatrixGame/
