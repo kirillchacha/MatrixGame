@@ -91,12 +91,14 @@ static bool GetSideInfo(int id, std::wstring &name, DWORD &color) {
 }
 
 CFormMenu::CFormMenu(void)
-  : CForm(), m_MapSel(0), m_MapTop(0), m_MapRows(0), m_SideSel(PLAYER_SIDE_DEFAULT), m_Texture(NULL), m_Dirty(true) {
+  : CForm(), m_MapSel(0), m_MapTop(0), m_MapRows(0), m_SideSel(PLAYER_SIDE_DEFAULT), m_Texture(NULL),
+    m_Preview(NULL), m_PreviewRect(0, 0, 0, 0), m_Dirty(true) {
     m_Name = L"FormMenu";
 }
 
 CFormMenu::~CFormMenu() {
     ReleaseTexture();
+    ReleasePreview();
 }
 
 void CFormMenu::LoadMapList(void) {
@@ -126,6 +128,24 @@ void CFormMenu::LoadMapList(void) {
     }
 }
 
+std::vector<int> ReadPlayableSides(Base::CStorage &stor) {
+    CPlayableSides sides;
+
+    CDataBuf *bside = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_SIDE, ST_BYTE);
+    CDataBuf *bkind = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_KIND, ST_BYTE);
+    if (bside != NULL && bkind != NULL && bside->GetArraysCount() > 0 && bkind->GetArraysCount() > 0)
+        sides.AddBuildings({bside->GetFirst<BYTE>(0), bside->GetArrayLength(0)},
+                           {bkind->GetFirst<BYTE>(0), bkind->GetArrayLength(0)}, BUILDING_BASE);
+
+    // A side without a base is still playable while the map gives it robots: it cannot build,
+    // but the engine keeps it in the match and it can capture buildings.
+    CDataBuf *rside = stor.GetBuf(DATA_ROBOTS, DATA_ROBOTS_SIDE, ST_BYTE);
+    if (rside != NULL && rside->GetArraysCount() > 0)
+        sides.AddRobots({rside->GetFirst<BYTE>(0), rside->GetArrayLength(0)});
+
+    return sides.Result();
+}
+
 void CFormMenu::ReadMapSides(SMapItem &item) {
     if (item.m_SidesKnown)
         return;
@@ -137,15 +157,7 @@ void CFormMenu::ReadMapSides(SMapItem &item) {
         if (!stor.Load(item.m_Path.c_str()))
             return;
 
-        CDataBuf *sides = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_SIDE, ST_BYTE);
-        CDataBuf *kinds = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_KIND, ST_BYTE);
-        if (sides == NULL || kinds == NULL || sides->GetArraysCount() == 0 || kinds->GetArraysCount() == 0)
-            return;
-
-        BYTE *side = sides->GetFirst<BYTE>(0);
-        BYTE *kind = kinds->GetFirst<BYTE>(0);
-        item.m_Sides = CollectPlayableSides({side, sides->GetArrayLength(0)},
-                                           {kind, kinds->GetArrayLength(0)}, BUILDING_BASE);
+        item.m_Sides = ReadPlayableSides(stor);
     }
     catch (...) {
         // An unreadable map simply offers no sides; the player can pick another one.
@@ -165,6 +177,7 @@ void CFormMenu::SelectMap(int index) {
         m_MapTop = m_MapSel - m_MapRows + 1;
 
     ReadMapSides(m_Maps[m_MapSel]);
+    LoadPreview();
 
     const std::vector<int> &sides = m_Maps[m_MapSel].m_Sides;
     if (sides.empty())
@@ -198,12 +211,60 @@ void CFormMenu::Leave(void) {
     DTRACE();
 
     ReleaseTexture();
+    ReleasePreview();
 }
 
 void CFormMenu::ReleaseTexture(void) {
     if (m_Texture) {
         g_Cache->Destroy(m_Texture);
         m_Texture = NULL;
+    }
+}
+
+// The original game ships a top down picture next to every map (Matrix\Map\<name>.jpg inside the
+// package), which is what its own map picker shows. Ten of the 84 maps have none.
+void CFormMenu::LoadPreview(void) {
+    DTRACE();
+
+    ReleasePreview();
+
+    if (m_Maps.empty())
+        return;
+
+    // The texture cache looks the extension up itself, so it wants the name without one.
+    const std::wstring name = std::wstring(MENU_MAP_FOLDER) + L"\\" + m_Maps[m_MapSel].m_Name;
+
+    std::wstring found;
+    if (!CFile::FileExist(found, name.c_str(), CacheExtsTex))
+        return;
+
+    CTextureManaged *tex = (CTextureManaged *)g_Cache->Get(CacheClass::TextureManaged, name.c_str());
+
+    try {
+        tex->Preload();
+    }
+    catch (...) {
+        // A broken picture is no reason to keep the player out of the map.
+        g_Cache->Delete(tex);
+        CCache::Destroy(tex);
+        return;
+    }
+
+    if (tex->GetSizeX() <= 0 || tex->GetSizeY() <= 0) {
+        g_Cache->Delete(tex);
+        CCache::Destroy(tex);
+        return;
+    }
+
+    m_Preview = tex;
+}
+
+void CFormMenu::ReleasePreview(void) {
+    if (m_Preview) {
+        // Get() put it into the cache index, so take it out before freeing it.
+        g_Cache->Delete(m_Preview);
+        CCache::Destroy(m_Preview);
+        m_Preview = NULL;
     }
 }
 
@@ -282,7 +343,7 @@ void CFormMenu::BuildTexture(void) {
                  available ? color : MENU_COLOR_DISABLED);
 
         DrawString(bmp, right_x + 30, top, right_w - 40, MENU_ROW_HEIGHT,
-                   available ? name : name + L" — нет базы на карте",
+                   available ? name : name + L" — нет войск на карте",
                    available ? (id == m_SideSel ? MENU_COLOR_ACCENT : MENU_COLOR_TEXT) : MENU_COLOR_DISABLED);
     }
 
@@ -302,6 +363,27 @@ void CFormMenu::BuildTexture(void) {
     FillRect(bmp, m_ExitRect, MENU_COLOR_PANEL);
     DrawString(bmp, m_ExitRect.left, m_ExitRect.top, btn_w, MENU_ROW_HEIGHT + 10, L"ВЫХОД", MENU_COLOR_TEXT, MENU_FONT,
                1);
+
+    // Map picture. Drawn as its own quad in Draw(), here we only lay out and frame its place.
+    const int prev_top = m_ExitRect.bottom + MENU_PAD * 2;
+    const int prev_bottom = h - MENU_PAD * 4;
+    const int prev_w = std::min(right_w, 480);
+
+    if (prev_bottom - prev_top >= 100 && prev_w >= 160) {
+        m_PreviewRect = CRect(right_x, prev_top, right_x + prev_w, prev_bottom);
+
+        DrawString(bmp, right_x, prev_top - MENU_ROW_HEIGHT, prev_w, MENU_ROW_HEIGHT, L"ВИД КАРТЫ", MENU_COLOR_DIM,
+                   MENU_FONT_SMALL);
+        FillRect(bmp, m_PreviewRect, MENU_COLOR_PANEL);
+
+        if (m_Preview == NULL) {
+            DrawString(bmp, right_x, (prev_top + prev_bottom - MENU_ROW_HEIGHT) / 2, prev_w, MENU_ROW_HEIGHT,
+                       L"Нет изображения", MENU_COLOR_DISABLED, MENU_FONT, 1);
+        }
+    }
+    else {
+        m_PreviewRect = CRect(0, 0, 0, 0);
+    }
 
     FillRect(bmp, CRect(list_x, h - MENU_PAD * 2 - 1, w - MENU_PAD * 2, h - MENU_PAD * 2), MENU_COLOR_LINE);
     DrawString(bmp, list_x, h - MENU_PAD * 2, w - list_x, MENU_ROW_HEIGHT,
@@ -365,6 +447,31 @@ void CFormMenu::Draw(void) {
     CInstDraw::BeginDraw(IDFVF_V4_UV);
     CInstDraw::AddVerts(v, m_Texture);
     CInstDraw::ActualDraw();
+
+    if (m_Preview != NULL && !m_PreviewRect.IsEmpty()) {
+        // Fit the picture into its panel without stretching it.
+        const float box_w = float(m_PreviewRect.right - m_PreviewRect.left);
+        const float box_h = float(m_PreviewRect.bottom - m_PreviewRect.top);
+        const float scale = std::min(box_w / float(m_Preview->GetSizeX()), box_h / float(m_Preview->GetSizeY()));
+        const float pic_w = float(m_Preview->GetSizeX()) * scale;
+        const float pic_h = float(m_Preview->GetSizeY()) * scale;
+        const float left = float(m_PreviewRect.left) + (box_w - pic_w) * 0.5f - 0.5f;
+        const float top = float(m_PreviewRect.top) + (box_h - pic_h) * 0.5f - 0.5f;
+
+        v[0].p = D3DXVECTOR4(left, top + pic_h, 0.5f, 1.0f);
+        v[1].p = D3DXVECTOR4(left, top, 0.5f, 1.0f);
+        v[2].p = D3DXVECTOR4(left + pic_w, top + pic_h, 0.5f, 1.0f);
+        v[3].p = D3DXVECTOR4(left + pic_w, top, 0.5f, 1.0f);
+
+        // The menu itself is drawn pixel to pixel, the picture is scaled down and needs filtering.
+        g_Sampler.SetState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        g_Sampler.SetState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        g_Sampler.SetState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+
+        CInstDraw::BeginDraw(IDFVF_V4_UV);
+        CInstDraw::AddVerts(v, m_Preview);
+        CInstDraw::ActualDraw();
+    }
 
     ASSERT_DX(g_D3DD->EndScene());
     ASSERT_DX(g_D3DD->Present(NULL, NULL, NULL, NULL));

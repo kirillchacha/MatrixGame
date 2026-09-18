@@ -11,7 +11,6 @@
 #include "MatrixGame.h"
 #include "MatrixFormGame.hpp"
 #include "MatrixFormMenu.hpp"
-#include "PlayableSides.hpp"
 #include "Text/Font.hpp"
 #include "MatrixMap.hpp"
 #include "Interface/CInterface.h"
@@ -454,14 +453,9 @@ void CGame::StartMatch(const wchar *map, int player_side_id)
 
     if (!stor.Load(mapname.c_str()))
         throw std::runtime_error("Cannot read the selected map.");
-    auto *owners = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_SIDE, ST_BYTE);
-    auto *kinds = stor.GetBuf(DATA_BUILDINGS, DATA_BUILDINGS_KIND, ST_BYTE);
-    std::vector<int> playable;
-    if (owners && kinds && owners->GetArraysCount() && kinds->GetArraysCount())
-        playable = CollectPlayableSides({owners->GetFirst<BYTE>(0), owners->GetArrayLength(0)},
-                                        {kinds->GetFirst<BYTE>(0), kinds->GetArrayLength(0)}, BUILDING_BASE);
+    const std::vector<int> playable = ReadPlayableSides(stor);
     if (std::find(playable.begin(), playable.end(), player_side_id) == playable.end())
-        throw std::runtime_error("The selected side has no starting base on this map.");
+        throw std::runtime_error("The selected side has neither a base nor robots on this map.");
     DCP();
 
     if (0 > g_MatrixMap->PrepareMap(stor, mapname))

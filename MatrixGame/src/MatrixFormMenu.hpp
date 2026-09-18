@@ -13,6 +13,14 @@
 
 class CTextureManaged;
 
+namespace Base {
+class CStorage;
+}
+
+// Side ids a human can take over on an already loaded map: the menu greys out the rest and
+// CGame::StartMatch() refuses anything else. See PlayableSides.hpp for the rule itself.
+std::vector<int> ReadPlayableSides(Base::CStorage &stor);
+
 // What the player picked in the menu. Filled in by CFormMenu, read by WinMain.
 struct SMatchChoice {
     std::wstring m_Map;  // map path inside the package, ready for CGame::StartMatch()
@@ -31,7 +39,7 @@ class CFormMenu : public CForm {
     struct SMapItem {
         std::wstring m_Name;   // file name without the extension, as shown
         std::wstring m_Path;   // full path inside the package
-        std::vector<int> m_Sides;  // side ids that own a base, empty until read from the map
+        std::vector<int> m_Sides;  // playable side ids, empty until read from the map
         bool m_SidesKnown;
     };
 
@@ -47,6 +55,8 @@ class CFormMenu : public CForm {
     Base::CRect m_ExitRect;
 
     CTextureManaged *m_Texture;
+    CTextureManaged *m_Preview;    // picture of the selected map, NULL when the package has none
+    Base::CRect m_PreviewRect;     // where Draw() puts the picture, laid out by BuildTexture()
     bool m_Dirty;  // selection changed, the screen sized texture has to be rebuilt
 
     void LoadMapList(void);
@@ -54,6 +64,8 @@ class CFormMenu : public CForm {
     void SelectMap(int index);
     void BuildTexture(void);
     void ReleaseTexture(void);
+    void LoadPreview(void);
+    void ReleasePreview(void);
     void Start(void);
     void Quit(void);
 

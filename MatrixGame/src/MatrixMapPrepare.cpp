@@ -1606,6 +1606,9 @@ void CMatrixMap::StaticPrepare2(void* robots) {
     }
 
     if (robots) {
+        bool player_robot = false;         // the player's side may own robots but no base
+        D3DXVECTOR2 player_robot_pos(0, 0);
+
         auto robots_vector = reinterpret_cast<std::vector<SPreRobot>*>(robots);
         for (auto& item : *robots_vector)
         {
@@ -1631,6 +1634,11 @@ void CMatrixMap::StaticPrepare2(void* robots) {
                     r->SetTeam(-1);
             }
             else {
+                if (!player_robot) {
+                    player_robot = true;
+                    player_robot_pos = D3DXVECTOR2(item.pos.x, item.pos.y);
+                }
+
                 SETFLAG(m_Flags, MMFLAG_SOUND_ORDER_ATTACK_DISABLE);
                 // g_MatrixMap->GetSideById(side)->PGOrderAttack(g_MatrixMap->GetSideById(side)->RobotToLogicGroup(r),CPoint(r->GetMapPosX(),r->GetMapPosY()),NULL);
                 g_MatrixMap->GetSideById(side)->PGOrderStop(g_MatrixMap->GetSideById(side)->RobotToLogicGroup(r));
@@ -1639,6 +1647,29 @@ void CMatrixMap::StaticPrepare2(void* robots) {
         }
         for (int i = 0; i < m_SideCnt; i++)
             m_Side[i].GroupNoTeamRobot();
+
+        // A side can be played without a base of its own, on its robots alone. RS_CAMPOS had
+        // nothing of that side to aim at back then (robots are born right here), so it left the
+        // camera where the map author put it. Move it to the player's own robots.
+        if (player_robot) {
+            bool own_base = false;
+            for (auto item : m_AllObjects) {
+                if (item->IsBase() && item->IsLiveBuilding() && item->GetSide() == PLAYER_SIDE) {
+                    own_base = true;
+                    break;
+                }
+            }
+
+            if (!own_base) {
+                float si = TableSin(m_CameraAngle);
+                float co = TableCos(m_CameraAngle);
+
+                m_Camera.SetXYStrategy(
+                        D3DXVECTOR2(player_robot_pos.x - 100 * si, player_robot_pos.y + 100 * co));
+                m_Camera.Takt(0);
+                m_Camera.BeforeDraw();
+            }
+        }
     }
 }
 
