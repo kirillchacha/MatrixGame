@@ -325,7 +325,11 @@ void CMatrixRobot::RNeed(dword need) {
 
                 name = path.c_str();
 
-                if (m_Side != PLAYER_SIDE) {
+                // Robot parts come in two texture sets: the plain one is painted yellow, the "_e"
+                // one carries the mask the side colour is applied to. Upstream picked the plain set
+                // for the human, who was always yellow; now that any side can be played, the set has
+                // to follow the colour instead, or a red player would command yellow robots.
+                if (m_Side != SIDE_YELLOW) {
                     name_e = path + L"_e";
                     if (CFile::FileExist(name_e, name_e.c_str(), L"dds~png")) {
                         name = name_e;

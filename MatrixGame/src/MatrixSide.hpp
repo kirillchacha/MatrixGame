@@ -15,10 +15,14 @@
 #define MAX_ROBOTS      60
 #define MAX_FACTORIES   10
 
+// Id of the yellow side in the "Side" config block. The original robot textures are painted yellow
+// for it; every other side wears the "_e" set, onto which the side colour is applied.
+#define SIDE_YELLOW 1
+
 // The side the human plays. It used to be the constant 1 (Yellow), but the menu lets the player pick
 // any side the map has a base for, so the value is now decided at startup and read back from the map.
 // Every "== PLAYER_SIDE" comparison keeps working, it just asks the map instead of the preprocessor.
-#define PLAYER_SIDE_DEFAULT 1
+#define PLAYER_SIDE_DEFAULT SIDE_YELLOW
 int PlayerSideId(void);
 #define PLAYER_SIDE     PlayerSideId()
 #define MAX_LOGIC_GROUP (MAX_ROBOTS + 1)
