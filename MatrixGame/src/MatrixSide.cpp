@@ -1722,7 +1722,8 @@ int CMatrixSideUnit::GetMaxSideRobots() {
         os = os->GetNextLogic();
     }
 
-    return (bases * ROBOTS_BY_BASE) + (bases == 0 ? 0 : ROBOTS_BY_MAIN) + factories /**ROBOT_BY_FACTORY*/;
+    // AI/group work arrays are sized to MAX_ROBOTS, regardless of map size.
+    return std::min(MAX_ROBOTS, (bases * ROBOTS_BY_BASE) + (bases == 0 ? 0 : ROBOTS_BY_MAIN) + factories);
 }
 
 int CMatrixSideUnit::GetRobotsInStack() {

@@ -4694,7 +4694,7 @@ void CMatrixRobotAI::RemoveOrder(int pos) {
     m_OrdersList[pos].Release();
 
     --m_OrdersInPool;
-    memcpy(m_OrdersList + pos, m_OrdersList + pos + 1, sizeof(SOrder) * (m_OrdersInPool - pos));
+    memmove(m_OrdersList + pos, m_OrdersList + pos + 1, sizeof(SOrder) * (m_OrdersInPool - pos));
 }
 
 void CMatrixRobotAI::RemoveOrder(OrderType order) {
